@@ -1,0 +1,210 @@
+name: 🔄 Auto Update Worker
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: "0 1 * * *"  # 🕐 每天凌晨1点自动运行
+  workflow_dispatch:      # 🖐️ 支持手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    name: 🚀 同步和优化 Worker 文件
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 初始化代码仓库
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: 🔧 配置 Git 和安装依赖
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global pull.rebase false
+          
+          # 安装工具
+          echo "📦 安装 terser 与 javascript-obfuscator..."
+          npm install -g terser javascript-obfuscator
+
+      - name: 🔍 检查文件状态
+        id: check_files
+        run: |
+          echo "🔍 $(date '+%Y-%m-%d %H:%M:%S') - 检查文件状态..."
+          
+          if [[ -f "version.txt" ]]; then
+            LOCAL_VERSION=$(cat version.txt)
+            echo "✅ version.txt 存在，版本: $LOCAL_VERSION"
+            echo "HAS_VERSION=true" >> $GITHUB_ENV
+          else
+            echo "📝 version.txt 不存在"
+            echo "HAS_VERSION=false" >> $GITHUB_ENV
+          fi
+          
+          # 文件缺失时强制更新
+          if [[ "$HAS_VERSION" == "false" || ! -f "source.js" || ! -f "_worker.js" ]]; then
+            echo "🔄 检测到文件缺失，需要强制更新"
+            echo "FORCE_UPDATE=true" >> $GITHUB_ENV
+          else
+            echo "FORCE_UPDATE=false" >> $GITHUB_ENV
+          fi
+
+      - name: 🌐 获取远程文件信息
+        id: remote_info
+        run: |
+          echo "🌍 $(date '+%Y-%m-%d %H:%M:%S') - 正在获取远程文件..."
+          RAW_URL="https://raw.githubusercontent.com/alienwaregf/CF-Worker-BestIP-collector-UI/refs/heads/main/_workers.js"
+          
+          for i in {1..3}; do
+            echo "🔁 第 $i 次尝试获取远程文件..."
+            if curl -f -s -o /tmp/remote_worker.js "$RAW_URL"; then
+              FILE_SIZE=$(stat -c%s /tmp/remote_worker.js 2>/dev/null || stat -f%z /tmp/remote_worker.js 2>/dev/null)
+              if [[ $FILE_SIZE -gt 1000 ]]; then
+                FILE_HASH=$(sha256sum /tmp/remote_worker.js | cut -d' ' -f1)
+                echo "✅ 远程文件获取成功，大小: $FILE_SIZE 字节，哈希: ${FILE_HASH:0:16}..."
+                echo "REMOTE_VERSION=$FILE_HASH" >> $GITHUB_ENV
+                break
+              fi
+            fi
+            
+            if [[ $i -eq 3 ]]; then
+              echo "❌ 获取远程文件失败"
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: 📊 版本比对和更新决策
+        id: update_decision
+        run: |
+          echo "📊 $(date '+%Y-%m-%d %H:%M:%S') - 版本比对和更新决策..."
+          
+          if [[ "$FORCE_UPDATE" == "true" ]]; then
+            echo "🔄 文件缺失，强制更新"
+            echo "UPDATE_NEEDED=true" >> $GITHUB_ENV
+          elif [[ -f "version.txt" ]]; then
+            LOCAL_VERSION=$(cat version.txt)
+            if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
+              echo "🎉 版本一致，无需更新"
+              echo "UPDATE_NEEDED=false" >> $GITHUB_ENV
+            else
+              echo "🔄 检测到新版本，需要更新"
+              echo "UPDATE_NEEDED=true" >> $GITHUB_ENV
+            fi
+          else
+            echo "🔄 首次运行，需要更新"
+            echo "UPDATE_NEEDED=true" >> $GITHUB_ENV
+          fi
+
+      - name: ⬇️ 下载原始文件
+        if: env.UPDATE_NEEDED == 'true'
+        run: |
+          echo "⬇️ $(date '+%Y-%m-%d %H:%M:%S') - 保存原始文件..."
+          cp /tmp/remote_worker.js source.js
+          echo "✅ source.js 保存成功"
+
+      - name: 🔧 代码混淆与压缩
+        if: env.UPDATE_NEEDED == 'true'
+        run: |
+          echo "🔧 $(date '+%Y-%m-%d %H:%M:%S') - 开始代码混淆与压缩..."
+
+          # Step 1: terser 预压缩
+          echo "🛠️ 使用 terser 初步压缩..."
+          terser /tmp/remote_worker.js --compress --mangle --output /tmp/min_worker.js
+
+          # Step 2: javascript-obfuscator 混淆（方案2）
+          echo "🧩 使用 javascript-obfuscator 混淆..."
+          # javascript-obfuscator 混淆（已修正选项名）
+          javascript-obfuscator /tmp/min_worker.js --output _worker.js --compact true \
+            --control-flow-flattening true \
+            --control-flow-flattening-threshold 0.75 \
+            --dead-code-injection true \
+            --dead-code-injection-threshold 0.4 \
+            --disable-console-output true \
+            --identifier-names-generator hexadecimal \
+            --string-array true \
+            --string-array-encoding rc4 \
+            --string-array-threshold 0.8 \
+            --string-array-rotate true \
+            --string-array-shuffle true \
+            --transform-object-keys true
+
+
+          # Step 3: 检查结果
+          if [[ -f "_worker.js" ]]; then
+            COMPRESSED_SIZE=$(stat -c%s _worker.js 2>/dev/null || stat -f%z _worker.js 2>/dev/null)
+            echo "📏 混淆后大小: $COMPRESSED_SIZE 字节"
+          else
+            echo "❌ 混淆失败，使用原始文件"
+            cp /tmp/remote_worker.js _worker.js
+          fi
+
+          # Step 4: 体积与比例报告
+          FINAL_SIZE=$(stat -c%s _worker.js 2>/dev/null || stat -f%z _worker.js 2>/dev/null)
+          ORIGINAL_SIZE=$(stat -c%s source.js 2>/dev/null || stat -f%z source.js 2>/dev/null)
+          COMPRESSION_RATIO=$(( (FINAL_SIZE * 100) / ORIGINAL_SIZE ))
+          
+          echo "📊 压缩报告:"
+          echo "   • 原始大小: $ORIGINAL_SIZE 字节"
+          echo "   • 混淆后大小: $FINAL_SIZE 字节"
+          echo "   • 变化比例: $COMPRESSION_RATIO%"
+
+          if [[ $FINAL_SIZE -gt 1048576 ]]; then
+            echo "⚠️ 警告：文件超过 1MB，可能影响 Cloudflare 部署"
+          fi
+
+      - name: 📝 提交更改
+        if: env.UPDATE_NEEDED == 'true'
+        run: |
+          echo "📝 $(date '+%Y-%m-%d %H:%M:%S') - 准备提交更改..."
+          echo "$REMOTE_VERSION" > version.txt
+          git add source.js _worker.js version.txt
+          if git diff --staged --quiet; then
+            echo "ℹ️ 无更改，跳过提交"
+            exit 0
+          fi
+          git commit -m "🔄 Auto Update Worker
+
+          • 同步最新 Worker 文件（混淆版）
+          • 版本: ${REMOTE_VERSION:0:16}...
+          • 更新时间: $(date '+%Y-%m-%d %H:%M:%S')"
+          git push
+          echo "✅ 提交完成"
+
+      - name: 🎉 更新完成
+        if: env.UPDATE_NEEDED == 'true'
+        run: |
+          echo "🎉 $(date '+%Y-%m-%d %H:%M:%S') - 自动更新完成！"
+          echo "::notice title=更新完成::已成功同步、压缩并混淆代码"
+
+      - name: 😴 无需更新
+        if: env.UPDATE_NEEDED == 'false'
+        run: |
+          echo "😴 $(date '+%Y-%m-%d %H:%M:%S') - 当前已是最新版本，无需更新"
+
+  cleanup:
+    name: 🧹 清理工作流记录
+    runs-on: ubuntu-latest
+    needs: update
+    permissions:
+      actions: write
+      contents: read
+    if: always()
+    steps:
+      - name: 🗑️ 删除旧工作流运行记录
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 3
+          keep_minimum_runs_per_workflow: 2
+
+      - name: 📊 清理完成通知
+        run: |
+          echo "🧹 工作流清理完成"
+          echo "::notice title=清理完成::已清理旧运行记录，保留最近3次"
