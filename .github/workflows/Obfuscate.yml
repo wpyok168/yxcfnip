@@ -120,10 +120,18 @@ jobs:
           echo "🧩 使用 javascript-obfuscator 混淆..."
           # javascript-obfuscator 混淆（已修正选项名）
           javascript-obfuscator /tmp/min_worker.js --output _worker.js --compact true \
+            --control-flow-flattening true \
+            --control-flow-flattening-threshold 0.75 \
+            --dead-code-injection true \
+            --dead-code-injection-threshold 0.4 \
+            --disable-console-output true \
             --identifier-names-generator hexadecimal \
             --string-array true \
-            --string-array-threshold 0.5 \
-            --simplify true
+            --string-array-encoding rc4 \
+            --string-array-threshold 0.8 \
+            --string-array-rotate true \
+            --string-array-shuffle true \
+            --transform-object-keys true
 
 
           # Step 3: 检查结果
