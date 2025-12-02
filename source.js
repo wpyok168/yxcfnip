@@ -1,5 +1,13 @@
+// 新增页面明暗：浅色/深色/跟随系统
+// 新增自定义数据源
+// 新增CFnew版IP输出方式，方便一键复制
+// 新增环境变量添加密码，且输出结果url不需要密码，方便引用
+// 改变默认edgetunnel输出方式为纯节点，方便结合Sub Store使用
+// 更改时间格式为24时制并新增年月日显示
+// 增加了Token管理
+// 新增CFnew自动更新引用url
 // 自定义优质IP数量
-const FAST_IP_COUNT = 50; // 修改这个数字来自定义优质IP数量
+const FAST_IP_COUNT = 20; // 修改这个数字来自定义优质IP数量
 const AUTO_TEST_MAX_IPS = 200; // 自动测速的最大IP数量，避免测速过多导致超时
 
 export default {
@@ -60,7 +68,7 @@ export default {
       const _cookie = request.headers.get('Cookie') || '';
       const _isAuthorized = await verifyAuthCookie(_cookie, env.password);
 
-      if (!_isAuthorized && _authUrl.pathname !== '/edgetunnel.txt' && _authUrl.pathname !== '/cfnew.txt') {
+      if (!_isAuthorized && _authUrl.pathname !== '/edgetunnel.txt' && _authUrl.pathname !== '/cfnew.txt' && _authUrl.pathname !== '/cf-custom-port') {
         return await serveAuthPage(env);
       }
 
@@ -109,6 +117,9 @@ export default {
           // 新增路由：CFNew版
           case '/cfnew.txt':
             return await handleGetCFNewIPs(request, env);
+          // 新增路由：自定义端口版
+          case '/cf-custom-port':
+            return await handleGetCFCustomPort(request, env);
           // --- 新增路由：自定义来源 ---
           case '/save-custom-source':
             return await handleSaveCustomSource(request, env);
@@ -871,6 +882,7 @@ export default {
                       <div class="dropdown-content">
                           <a href="/cfnew.txt${tokenParam}" target="_blank">🔗 在线查看</a>
                           <a href="/cfnew.txt${tokenParam}" download="cfnew_ips.txt">📥 下载文件</a>
+                          <a href="javascript:void(0)" onclick="openCustomPortLink()">♻️ 自动更新</a>
                       </div>
                   </div>
                   
@@ -1028,6 +1040,21 @@ export default {
         </div>
       </div>
 
+      <div class="modal" id="port-modal">
+        <div class="modal-content">
+            <h3>⚙️ 自动更新 - 端口配置</h3>
+            <div class="form-group">
+                <label class="form-label">请输入端口号</label>
+                <input type="number" class="form-input" id="custom-port-input" value="443" placeholder="例如: 443, 8443, 2053" onkeypress="if(event.key==='Enter') submitCustomPort()">
+                <div class="form-help">默认为 443，点击确认后将在新窗口打开</div>
+            </div>
+            <div class="modal-buttons">
+                <button class="button button-secondary" onclick="closePortModal()">取消</button>
+                <button class="button" onclick="submitCustomPort()">确认</button>
+            </div>
+        </div>
+      </div>
+
       <script>
           // 深浅色模式控制
           function setTheme(mode) {
@@ -1087,6 +1114,31 @@ export default {
           // --- 新增：Token管理相关JS ---
           async function logout() {
             try { await fetch('/auth-logout', { method: 'POST' }); location.reload(); } catch (e) { location.reload(); }
+          }
+
+          // --- 新增：自定义端口模态框控制 ---
+          function openCustomPortLink() {
+            document.getElementById('port-modal').style.display = 'flex';
+            document.getElementById('custom-port-input').value = '443';
+            // 自动聚焦输入框
+            setTimeout(() => document.getElementById('custom-port-input').focus(), 100);
+          }
+
+          function closePortModal() {
+            document.getElementById('port-modal').style.display = 'none';
+          }
+
+          function submitCustomPort() {
+            let port = document.getElementById('custom-port-input').value;
+            port = port.trim();
+            if (!port) port = "443";
+            
+            let url = '/cf-custom-port?port=' + port;
+            if (tokenConfig && tokenConfig.token) {
+                url += '&token=' + tokenConfig.token;
+            }
+            window.open(url, '_blank');
+            closePortModal();
           }
 
           function openTokenModal() {
@@ -1721,6 +1773,40 @@ async function saveTokenConfig() {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Content-Disposition': 'inline; filename="cfnew_ips.txt"',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
+
+  // 新增：处理自定义端口版 IP 列表获取 (IP:端口，一行一个)
+  async function handleGetCFCustomPort(request, env) {
+    // --- 门禁检查 ---
+    const tokenConfig = await getTokenConfig(env);
+    if (tokenConfig && tokenConfig.token) {
+        const url = new URL(request.url);
+        if (url.searchParams.get('token') !== tokenConfig.token) {
+            return new Response('需要管理员权限', { 
+                status: 401, 
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' } 
+            });
+        }
+    }
+    // ----------------
+
+    const url = new URL(request.url);
+    const port = url.searchParams.get('port') || '443'; // 获取端口参数
+
+    const data = await getStoredSpeedIPs(env);
+    const fastIPs = data.fastIPs || [];
+    
+    // 格式化为 IP:端口#备注 (一行一个)
+    // 修改：使用间隔号 (·) 代替空格，彻底解决被替换为下划线的问题
+    const ipList = fastIPs.map(item => `${item.ip}:${port}#♾️·CFnew·${item.ip}`).join('\n');
+    
+    return new Response(ipList, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': `inline; filename="cf_custom_${port}.txt"`,
         'Access-Control-Allow-Origin': '*'
       }
     });
