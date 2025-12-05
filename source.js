@@ -13,7 +13,7 @@
 // 更改时间格式为24时制并新增年月日显示
 // 增加了Token管理
 // 新增CFnew自动更新引用url
-// 新增国旗 国家
+// 更改测速方式为HTTP RTT测速，通常比单纯的Ping值要大，但更符合实际网页加载感受，新增国旗 国家
 // ==========================================
 // 1. 全局配置
 // ==========================================
@@ -820,15 +820,16 @@ async function serveAuthPage(env) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cloudflare IP 收集器 - 登录</title>
     <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         :root { --bg-color: #f8fafc; --card-bg: white; --text-color: #334155; --border-color: #e2e8f0; }
         @media (prefers-color-scheme: dark) { :root { --bg-color: #0f172a; --card-bg: #1e293b; --text-color: #cbd5e1; --border-color: #334155; } }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
         .login-card { background: var(--card-bg); padding: 40px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; border: 1px solid var(--border-color); }
         h1 { color: #3b82f6; margin-bottom: 10px; font-size: 1.8rem; }
         p { color: #64748b; margin-bottom: 30px; font-size: 0.95rem; }
-        input { width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 20px; font-size: 1rem; outline: none; background: var(--bg-color); color: var(--text-color); transition: border-color 0.2s; }
+        input { box-sizing: border-box; width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 20px; font-size: 1rem; outline: none; background: var(--bg-color); color: var(--text-color); transition: border-color 0.2s; }
         input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-        button { width: 100%; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        button { box-sizing: border-box; width: 100%; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #2563eb; }
         button:disabled { opacity: 0.7; cursor: not-allowed; }
         .error-msg { background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 8px; margin-top: 20px; font-size: 0.9rem; display: none; border: 1px solid #fecaca; }
@@ -1349,7 +1350,7 @@ async function serveHTML(env) {
                 } catch (error) { const speedElement = document.getElementById(\`speed-\${ip.replace(/\./g, '-')}\`); speedElement.textContent = '错误'; speedElement.className = 'speed-result speed-slow'; }
                 currentTestIndex = i + 1; const progress = (currentTestIndex / totalIPs) * 100; progressBarInner.style.width = \`\${progress}%\`; await new Promise(resolve => setTimeout(resolve, 300));
             }
-            isTesting = false; speedtestBtn.disabled = false; speedtestBtn.textContent = '⚡ 开始测速'; progressBar.style.display = 'none'; showMessage(\`测速完成，已测试 \${currentTestIndex} 个IP地址\`);
+            isTesting = false; speedtestBtn.disabled = false; speedtestBtn.textContent = '⚡ 开始测速'; progressBar.style.display = 'none'; statusElement.textContent = '测速完成'; showMessage(\`测速完成，已测试 \${currentTestIndex} 个IP地址\`);
             showMessage('正在保存测速结果...', 'success');
             const newFastIPs = []; const items = document.querySelectorAll('.ip-item');
             items.forEach(item => { const ip = item.dataset.ip; const speedEl = document.getElementById(\`speed-\${ip.replace(/\./g, '-')}\`); const flagEl = document.getElementById(\`flag-\${ip.replace(/\./g, '-')}\`); if (speedEl && speedEl.textContent.includes('ms')) { const latency = parseInt(speedEl.textContent); const info = flagEl ? flagEl.textContent : ''; newFastIPs.push({ ip: ip, latency: latency, info: info }); } });
