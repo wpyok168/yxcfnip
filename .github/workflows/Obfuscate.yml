@@ -57,7 +57,7 @@ jobs:
         id: remote_info
         run: |
           echo "🌍 $(date '+%Y-%m-%d %H:%M:%S') - 正在获取远程文件..."
-          RAW_URL="https://raw.githubusercontent.com/alienwaregf/CF-Worker-BestIP-collector-UI/refs/heads/main/_workers.js"
+          RAW_URL="https://raw.githubusercontent.com/byJoey/yx-auto/refs/heads/main/_worker.js"
           
           for i in {1..3}; do
             echo "🔁 第 $i 次尝试获取远程文件..."
