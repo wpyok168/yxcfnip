@@ -727,140 +727,6 @@ function generateQuantumultConfig(links) {
     return btoa(links.join('\n'));
 }
 
-// 在线测试延迟 - 测试IP或域名的延迟
-async function testLatency(host, port = 443, timeout = 5000) {
-    const startTime = Date.now();
-    try {
-        // 解析地址和端口
-        let testHost = host;
-        let testPort = port;
-        
-        // 如果host包含端口，提取出来
-        if (host.includes(':')) {
-            const parts = host.split(':');
-            testHost = parts[0].replace(/[\[\]]/g, ''); // 移除IPv6的方括号
-            testPort = parseInt(parts[1]) || port;
-        }
-        
-        // 构建测试URL
-        const protocol = testPort === 443 || testPort === 8443 ? 'https' : 'http';
-        const testUrl = `${protocol}://${testHost}:${testPort}/cdn-cgi/trace`;
-        
-        // 使用AbortController控制超时
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
-        
-        try {
-            const response = await fetch(testUrl, {
-                signal: controller.signal,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-            });
-            
-            clearTimeout(timeoutId);
-            
-            const responseTime = Date.now() - startTime;
-            
-            if (response.ok) {
-                const text = await response.text();
-                const ipMatch = text.match(/ip=([^\s]+)/);
-                const locMatch = text.match(/loc=([^\s]+)/);
-                const coloMatch = text.match(/colo=([^\s]+)/);
-                
-                return {
-                    success: true,
-                    host: host,
-                    port: testPort,
-                    latency: responseTime,
-                    ip: ipMatch ? ipMatch[1] : null,
-                    location: locMatch ? locMatch[1] : null,
-                    colo: coloMatch ? coloMatch[1] : null
-                };
-            } else {
-                return {
-                    success: false,
-                    host: host,
-                    port: testPort,
-                    latency: responseTime,
-                    error: `HTTP ${response.status}`
-                };
-            }
-        } catch (fetchError) {
-            clearTimeout(timeoutId);
-            const responseTime = Date.now() - startTime;
-            
-            if (fetchError.name === 'AbortError') {
-                return {
-                    success: false,
-                    host: host,
-                    port: testPort,
-                    latency: timeout,
-                    error: '请求超时'
-                };
-            }
-            
-            return {
-                success: false,
-                host: host,
-                port: testPort,
-                latency: responseTime,
-                error: fetchError.message || '连接失败'
-            };
-        }
-    } catch (error) {
-        const responseTime = Date.now() - startTime;
-        return {
-            success: false,
-            host: host,
-            port: port,
-            latency: responseTime,
-            error: error.message || '未知错误'
-        };
-    }
-}
-
-// 批量测试延迟
-async function batchTestLatency(hosts, port = 443, timeout = 5000, concurrency = 5) {
-    const results = [];
-    const chunks = [];
-    
-    // 将hosts分成多个批次
-    for (let i = 0; i < hosts.length; i += concurrency) {
-        chunks.push(hosts.slice(i, i + concurrency));
-    }
-    
-    // 按批次测试
-    for (const chunk of chunks) {
-        const chunkResults = await Promise.allSettled(
-            chunk.map(host => testLatency(host, port, timeout))
-        );
-        
-        chunkResults.forEach((result, index) => {
-            if (result.status === 'fulfilled') {
-                results.push(result.value);
-            } else {
-                results.push({
-                    success: false,
-                    host: chunk[index],
-                    port: port,
-                    latency: timeout,
-                    error: result.reason?.message || '测试失败'
-                });
-            }
-        });
-    }
-    
-    // 按延迟排序
-    results.sort((a, b) => {
-        if (a.success && !b.success) return -1;
-        if (!a.success && b.success) return 1;
-        return a.latency - b.latency;
-    });
-    
-    return results;
-}
-
 // 生成iOS 26风格的主页
 function generateHomePage(scuValue) {
     const scu = scuValue || 'https://url.v1.mk/sub';
@@ -882,7 +748,7 @@ function generateHomePage(scuValue) {
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(180deg, #f5f5f7 0%, #ffffff 100%);
+            background: linear-gradient(180deg, #f5f5f7 0%, #ffffff 50%, #fafafa 100%);
             color: #1d1d1f;
             min-height: 100vh;
             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -897,36 +763,43 @@ function generateHomePage(scuValue) {
         
         .header {
             text-align: center;
-            padding: 40px 20px 30px;
+            padding: 48px 20px 32px;
         }
         
         .header h1 {
-            font-size: 34px;
+            font-size: 40px;
             font-weight: 700;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.3px;
             color: #1d1d1f;
             margin-bottom: 8px;
+            line-height: 1.1;
         }
         
         .header p {
             font-size: 17px;
             color: #86868b;
             font-weight: 400;
+            line-height: 1.5;
         }
         
         .card {
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(20px) saturate(180%);
-            -webkit-backdrop-filter: blur(20px) saturate(180%);
-            border-radius: 20px;
-            padding: 24px;
-            margin-bottom: 16px;
-            box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(30px) saturate(200%);
+            -webkit-backdrop-filter: blur(30px) saturate(200%);
+            border-radius: 24px;
+            padding: 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.05);
+            border: 0.5px solid rgba(0, 0, 0, 0.06);
+            will-change: transform;
         }
         
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
+        }
+        
+        .form-group:last-child {
+            margin-bottom: 0;
         }
         
         .form-group label {
@@ -939,42 +812,75 @@ function generateHomePage(scuValue) {
             letter-spacing: 0.5px;
         }
         
-        .form-group input {
+        .form-group input,
+        .form-group textarea {
             width: 100%;
             padding: 14px 16px;
             font-size: 17px;
             font-weight: 400;
             color: #1d1d1f;
             background: rgba(142, 142, 147, 0.12);
-            border: none;
+            border: 2px solid transparent;
             border-radius: 12px;
             outline: none;
-            transition: all 0.2s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             -webkit-appearance: none;
         }
         
-        .form-group input:focus {
+        .form-group input:focus,
+        .form-group textarea:focus {
             background: rgba(142, 142, 147, 0.16);
-            transform: scale(1.01);
+            border-color: #007AFF;
+            transform: scale(1.005);
         }
         
-        .form-group input::placeholder {
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
             color: #86868b;
         }
         
-        .switch-group {
+        .form-group small {
+            display: block;
+            margin-top: 8px;
+            color: #86868b;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        
+        .list-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 0;
+            padding: 16px 0;
+            min-height: 52px;
+            cursor: pointer;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+            transition: background-color 0.15s ease;
         }
         
-        .switch-group label {
+        .list-item:last-child {
+            border-bottom: none;
+        }
+        
+        .list-item:active {
+            background-color: rgba(142, 142, 147, 0.08);
+            margin: 0 -28px;
+            padding-left: 28px;
+            padding-right: 28px;
+        }
+        
+        .list-item-label {
             font-size: 17px;
             font-weight: 400;
             color: #1d1d1f;
-            text-transform: none;
-            letter-spacing: 0;
+            flex: 1;
+        }
+        
+        .list-item-description {
+            font-size: 13px;
+            color: #86868b;
+            margin-top: 4px;
+            line-height: 1.4;
         }
         
         .switch {
@@ -983,12 +889,13 @@ function generateHomePage(scuValue) {
             height: 31px;
             background: rgba(142, 142, 147, 0.3);
             border-radius: 16px;
-            transition: background 0.3s ease;
+            transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             cursor: pointer;
+            flex-shrink: 0;
         }
         
         .switch.active {
-            background: #34c759;
+            background: #34C759;
         }
         
         .switch::after {
@@ -1001,7 +908,7 @@ function generateHomePage(scuValue) {
             background: #ffffff;
             border-radius: 50%;
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1);
         }
         
         .switch.active::after {
@@ -1014,25 +921,41 @@ function generateHomePage(scuValue) {
             font-size: 17px;
             font-weight: 600;
             color: #ffffff;
-            background: #007aff;
+            background: #007AFF;
             border: none;
-            border-radius: 12px;
+            border-radius: 14px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             margin-top: 8px;
             -webkit-appearance: none;
-            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.25);
+            will-change: transform;
+        }
+        
+        .btn:hover {
+            background: #0051D5;
+            box-shadow: 0 6px 16px rgba(0, 122, 255, 0.3);
         }
         
         .btn:active {
-            transform: scale(0.98);
-            opacity: 0.8;
+            transform: scale(0.97);
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
         }
         
         .btn-secondary {
             background: rgba(142, 142, 147, 0.12);
-            color: #007aff;
+            color: #007AFF;
             box-shadow: none;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(142, 142, 147, 0.16);
         }
         
         .btn-secondary:active {
@@ -1048,20 +971,33 @@ function generateHomePage(scuValue) {
             color: #1d1d1f;
             word-break: break-all;
             display: none;
+            line-height: 1.5;
         }
         
         .result.show {
             display: block;
         }
         
+        .result-card {
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            border: 0.5px solid rgba(0, 0, 0, 0.06);
+        }
+        
         .result-url {
             margin-top: 12px;
             padding: 12px;
             background: rgba(0, 122, 255, 0.1);
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 13px;
             color: #007aff;
             word-break: break-all;
+            line-height: 1.5;
         }
         
         .copy-btn {
@@ -1071,20 +1007,26 @@ function generateHomePage(scuValue) {
             background: rgba(0, 122, 255, 0.1);
             color: #007aff;
             border: none;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-        
-        .client-btn {
-            padding: 12px 10px;
-            font-size: 14px;
-            font-weight: 500;
-            color: #007aff;
-            background: rgba(0, 122, 255, 0.1);
-            border: 1px solid rgba(0, 122, 255, 0.2);
             border-radius: 10px;
             cursor: pointer;
             transition: all 0.2s ease;
+        }
+        
+        .copy-btn:active {
+            background: rgba(0, 122, 255, 0.2);
+            transform: scale(0.98);
+        }
+        
+        .client-btn {
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #007AFF;
+            background: rgba(0, 122, 255, 0.1);
+            border: 1px solid rgba(0, 122, 255, 0.2);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             -webkit-appearance: none;
             white-space: nowrap;
             overflow: hidden;
@@ -1093,8 +1035,9 @@ function generateHomePage(scuValue) {
         }
         
         .client-btn:active {
-            transform: scale(0.98);
+            transform: scale(0.97);
             background: rgba(0, 122, 255, 0.2);
+            border-color: rgba(0, 122, 255, 0.3);
         }
         
         .checkbox-label {
@@ -1107,12 +1050,13 @@ function generateHomePage(scuValue) {
             -webkit-user-select: none;
             position: relative;
             z-index: 1;
+            padding: 8px 0;
         }
         
         .checkbox-label input[type="checkbox"] {
-            margin-right: 8px;
-            width: 20px;
-            height: 20px;
+            margin-right: 12px;
+            width: 22px;
+            height: 22px;
             cursor: pointer;
             flex-shrink: 0;
             position: relative;
@@ -1130,18 +1074,25 @@ function generateHomePage(scuValue) {
         @media (max-width: 480px) {
             .client-btn {
                 font-size: 12px;
-                padding: 10px 8px;
+                padding: 10px 12px;
+            }
+            
+            .header h1 {
+                font-size: 34px;
             }
         }
         
         .footer {
             text-align: center;
-            padding: 30px 20px;
+            padding: 32px 20px;
             color: #86868b;
             font-size: 13px;
         }
         
         .footer a {
+            color: #007AFF;
+            text-decoration: none;
+            font-weight: 500;
             transition: opacity 0.2s ease;
         }
         
@@ -1151,26 +1102,50 @@ function generateHomePage(scuValue) {
         
         @media (prefers-color-scheme: dark) {
             body {
-                background: linear-gradient(180deg, #000000 0%, #1c1c1e 100%);
+                background: linear-gradient(180deg, #000000 0%, #1c1c1e 50%, #2c2c2e 100%);
                 color: #f5f5f7;
             }
             
             .card {
-                background: rgba(28, 28, 30, 0.8);
-                border: 0.5px solid rgba(255, 255, 255, 0.1);
+                background: rgba(28, 28, 30, 0.75);
+                border: 0.5px solid rgba(255, 255, 255, 0.12);
+                box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
             }
             
-            .form-group input {
+            .form-group input,
+            .form-group textarea {
                 background: rgba(142, 142, 147, 0.2);
                 color: #f5f5f7;
             }
             
-            .form-group input:focus {
+            .form-group input:focus,
+            .form-group textarea:focus {
                 background: rgba(142, 142, 147, 0.25);
+                border-color: #5ac8fa;
             }
             
-            .switch-group label {
+            .list-item {
+                border-bottom-color: rgba(255, 255, 255, 0.1);
+            }
+            
+            .list-item:active {
+                background-color: rgba(255, 255, 255, 0.08);
+            }
+            
+            .list-item-label {
                 color: #f5f5f7;
+            }
+            
+            .switch {
+                background: rgba(142, 142, 147, 0.4);
+            }
+            
+            .switch.active {
+                background: #30d158;
+            }
+            
+            .switch::after {
+                background: #ffffff;
             }
             
             .result {
@@ -1178,12 +1153,12 @@ function generateHomePage(scuValue) {
                 color: #f5f5f7;
             }
             
-            select {
-                background: rgba(142, 142, 147, 0.2) !important;
-                color: #f5f5f7 !important;
+            .result-card {
+                background: rgba(28, 28, 30, 0.9);
+                border-color: rgba(255, 255, 255, 0.1);
             }
             
-            label span {
+            .checkbox-label span {
                 color: #f5f5f7;
             }
             
@@ -1197,22 +1172,6 @@ function generateHomePage(scuValue) {
                 color: #5ac8fa !important;
             }
             
-            textarea {
-                background: rgba(142, 142, 147, 0.2) !important;
-                color: #f5f5f7 !important;
-            }
-            
-            textarea::placeholder {
-                color: #86868b !important;
-            }
-            
-            #testResult, #batchTestResult {
-                color: #f5f5f7 !important;
-            }
-            
-            #testResult div, #batchTestResult div {
-                color: #f5f5f7 !important;
-            }
         }
     </style>
 </head>
@@ -1240,19 +1199,25 @@ function generateHomePage(scuValue) {
                 <small style="display: block; margin-top: 6px; color: #86868b; font-size: 13px;">自定义WebSocket路径，例如：/v2ray 或 /</small>
             </div>
             
-            <div class="switch-group">
-                <label>启用优选域名</label>
-                <div class="switch active" id="switchDomain" onclick="toggleSwitch('switchDomain')"></div>
+            <div class="list-item" onclick="toggleSwitch('switchDomain')">
+                <div>
+                    <div class="list-item-label">启用优选域名</div>
+                </div>
+                <div class="switch active" id="switchDomain"></div>
             </div>
             
-            <div class="switch-group">
-                <label>启用优选IP</label>
-                <div class="switch active" id="switchIP" onclick="toggleSwitch('switchIP')"></div>
+            <div class="list-item" onclick="toggleSwitch('switchIP')">
+                <div>
+                    <div class="list-item-label">启用优选IP</div>
+                </div>
+                <div class="switch active" id="switchIP"></div>
             </div>
             
-            <div class="switch-group">
-                <label>启用GitHub优选</label>
-                <div class="switch active" id="switchGitHub" onclick="toggleSwitch('switchGitHub')"></div>
+            <div class="list-item" onclick="toggleSwitch('switchGitHub')">
+                <div>
+                    <div class="list-item-label">启用GitHub优选</div>
+                </div>
+                <div class="switch active" id="switchGitHub"></div>
             </div>
             
             <div class="form-group" id="githubUrlGroup" style="margin-top: 12px;">
@@ -1263,18 +1228,24 @@ function generateHomePage(scuValue) {
             
             <div class="form-group" style="margin-top: 24px;">
                 <label>协议选择</label>
-                <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
-                    <div class="switch-group">
-                        <label>VLESS (vl)</label>
-                        <div class="switch active" id="switchVL" onclick="toggleSwitch('switchVL')"></div>
+                <div style="margin-top: 8px;">
+                    <div class="list-item" onclick="toggleSwitch('switchVL')">
+                        <div>
+                            <div class="list-item-label">VLESS (vl)</div>
+                        </div>
+                        <div class="switch active" id="switchVL"></div>
                     </div>
-                    <div class="switch-group">
-                        <label>Trojan (tj)</label>
-                        <div class="switch" id="switchTJ" onclick="toggleSwitch('switchTJ')"></div>
+                    <div class="list-item" onclick="toggleSwitch('switchTJ')">
+                        <div>
+                            <div class="list-item-label">Trojan (tj)</div>
+                        </div>
+                        <div class="switch" id="switchTJ"></div>
                     </div>
-                    <div class="switch-group">
-                        <label>VMess (vm)</label>
-                        <div class="switch" id="switchVM" onclick="toggleSwitch('switchVM')"></div>
+                    <div class="list-item" onclick="toggleSwitch('switchVM')">
+                        <div>
+                            <div class="list-item-label">VMess (vm)</div>
+                        </div>
+                        <div class="switch" id="switchVM"></div>
                     </div>
                 </div>
             </div>
@@ -1328,41 +1299,19 @@ function generateHomePage(scuValue) {
                 </div>
             </div>
             
-            <div class="switch-group" style="margin-top: 20px;">
-                <label>仅TLS节点</label>
-                <div class="switch" id="switchTLS" onclick="toggleSwitch('switchTLS')"></div>
-            </div>
-            <small style="display: block; margin-top: -12px; margin-bottom: 12px; color: #86868b; font-size: 13px; padding-left: 0;">启用后只生成带TLS的节点，不生成非TLS节点（如80端口）</small>
-        </div>
-        
-        <div class="card" style="margin-top: 16px;">
-            <div class="form-group">
-                <label>在线延迟测试</label>
-                <input type="text" id="testHost" placeholder="输入IP或域名，例如: 1.1.1.1 或 example.com" style="margin-bottom: 12px;">
-                <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-                    <input type="number" id="testPort" placeholder="端口" value="443" style="flex: 1; min-width: 0;">
-                    <input type="number" id="testTimeout" placeholder="超时(ms)" value="5000" style="flex: 1; min-width: 0;">
+            <div class="list-item" onclick="toggleSwitch('switchTLS')" style="margin-top: 8px;">
+                <div>
+                    <div class="list-item-label">仅TLS节点</div>
+                    <div class="list-item-description">启用后只生成带TLS的节点，不生成非TLS节点（如80端口）</div>
                 </div>
-                <button type="button" class="btn btn-secondary" onclick="testSingleLatency()" id="testBtn" style="margin-top: 0;">测试延迟</button>
-                <div id="testResult" style="display: none; margin-top: 12px; padding: 12px; background: rgba(142, 142, 147, 0.12); border-radius: 8px; font-size: 14px;"></div>
-            </div>
-            
-            <div class="form-group" style="margin-top: 24px;">
-                <label>批量测试延迟</label>
-                <textarea id="batchTestHosts" placeholder="每行一个IP或域名，例如：&#10;1.1.1.1&#10;1.0.0.1&#10;example.com" style="width: 100%; padding: 14px 16px; font-size: 15px; font-weight: 400; color: #1d1d1f; background: rgba(142, 142, 147, 0.12); border: none; border-radius: 12px; outline: none; resize: vertical; min-height: 100px; font-family: inherit;"></textarea>
-                <div style="display: flex; gap: 10px; margin-top: 12px;">
-                    <input type="number" id="batchTestPort" placeholder="端口" value="443" style="flex: 1; min-width: 0;">
-                    <input type="number" id="batchTestTimeout" placeholder="超时(ms)" value="5000" style="flex: 1; min-width: 0;">
-                </div>
-                <button type="button" class="btn btn-secondary" onclick="testBatchLatency()" id="batchTestBtn" style="margin-top: 12px;">批量测试</button>
-                <div id="batchTestResult" style="display: none; margin-top: 12px; max-height: 400px; overflow-y: auto;"></div>
+                <div class="switch" id="switchTLS"></div>
             </div>
         </div>
         
         <div class="footer">
             <p>简化版优选工具 • 仅用于节点生成</p>
             <div style="margin-top: 20px; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;">
-                <a href="https://github.com/byJoey/cfnew" target="_blank" style="color: #007aff; text-decoration: none; font-size: 15px; font-weight: 500;">GitHub 项目</a>
+                <a href="https://github.com/byJoey/yx-auto" target="_blank" style="color: #007aff; text-decoration: none; font-size: 15px; font-weight: 500;">GitHub 项目</a>
                 <a href="https://www.youtube.com/@joeyblog" target="_blank" style="color: #007aff; text-decoration: none; font-size: 15px; font-weight: 500;">YouTube @joeyblog</a>
             </div>
         </div>
@@ -1475,7 +1424,7 @@ function generateHomePage(scuValue) {
             // 添加协议选择
             if (switches.switchVL) subscriptionUrl += '&ev=yes';
             if (switches.switchTJ) subscriptionUrl += '&et=yes';
-            if (switches.switchVM) subscriptionUrl += '&vm=yes';
+            if (switches.switchVM) subscriptionUrl += '&mess=yes';
             
             if (!ipv4Enabled) subscriptionUrl += '&ipv4=no';
             if (!ipv6Enabled) subscriptionUrl += '&ipv6=no';
@@ -1570,174 +1519,6 @@ function generateHomePage(scuValue) {
                 }
             }
         }
-        
-        // 单个延迟测试
-        async function testSingleLatency() {
-            const host = document.getElementById('testHost').value.trim();
-            const port = parseInt(document.getElementById('testPort').value) || 443;
-            const timeout = parseInt(document.getElementById('testTimeout').value) || 5000;
-            const testBtn = document.getElementById('testBtn');
-            const testResult = document.getElementById('testResult');
-            
-            if (!host) {
-                alert('请输入要测试的IP或域名');
-                return;
-            }
-            
-            testBtn.disabled = true;
-            testBtn.textContent = '测试中...';
-            testResult.style.display = 'none';
-            
-            try {
-                const currentUrl = new URL(window.location.href);
-                const baseUrl = currentUrl.origin;
-                const testUrl = \`\${baseUrl}/test?host=\${encodeURIComponent(host)}&port=\${port}&timeout=\${timeout}\`;
-                
-                const response = await fetch(testUrl);
-                const result = await response.json();
-                
-                testResult.style.display = 'block';
-                
-                if (result.success) {
-                    testResult.innerHTML = \`
-                        <div style="color: #34c759; font-weight: 600; margin-bottom: 8px;">✓ 测试成功</div>
-                        <div style="color: #1d1d1f; margin-bottom: 4px;"><strong>延迟:</strong> \${result.latency}ms</div>
-                        \${result.ip ? \`<div style="color: #1d1d1f; margin-bottom: 4px;"><strong>IP:</strong> \${result.ip}</div>\` : ''}
-                        \${result.location ? \`<div style="color: #1d1d1f; margin-bottom: 4px;"><strong>位置:</strong> \${result.location}</div>\` : ''}
-                        \${result.colo ? \`<div style="color: #1d1d1f;"><strong>数据中心:</strong> \${result.colo}</div>\` : ''}
-                    \`;
-                    testResult.style.background = 'rgba(52, 199, 89, 0.1)';
-                } else {
-                    testResult.innerHTML = \`
-                        <div style="color: #ff3b30; font-weight: 600; margin-bottom: 8px;">✗ 测试失败</div>
-                        <div style="color: #1d1d1f; margin-bottom: 4px;"><strong>延迟:</strong> \${result.latency}ms</div>
-                        <div style="color: #1d1d1f;"><strong>错误:</strong> \${result.error || '未知错误'}</div>
-                    \`;
-                    testResult.style.background = 'rgba(255, 59, 48, 0.1)';
-                }
-            } catch (error) {
-                testResult.style.display = 'block';
-                testResult.innerHTML = \`
-                    <div style="color: #ff3b30; font-weight: 600;">✗ 测试失败</div>
-                    <div style="color: #1d1d1f; margin-top: 4px;">\${error.message || '网络错误'}</div>
-                \`;
-                testResult.style.background = 'rgba(255, 59, 48, 0.1)';
-            } finally {
-                testBtn.disabled = false;
-                testBtn.textContent = '测试延迟';
-            }
-        }
-        
-        // 批量延迟测试
-        async function testBatchLatency() {
-            const hostsText = document.getElementById('batchTestHosts').value.trim();
-            const port = parseInt(document.getElementById('batchTestPort').value) || 443;
-            const timeout = parseInt(document.getElementById('batchTestTimeout').value) || 5000;
-            const batchTestBtn = document.getElementById('batchTestBtn');
-            const batchTestResult = document.getElementById('batchTestResult');
-            
-            if (!hostsText) {
-                alert('请输入要测试的IP或域名列表');
-                return;
-            }
-            
-            const hosts = hostsText.split('\\n')
-                .map(line => line.trim())
-                .filter(line => line.length > 0);
-            
-            if (hosts.length === 0) {
-                alert('请输入至少一个IP或域名');
-                return;
-            }
-            
-            batchTestBtn.disabled = true;
-            batchTestBtn.textContent = \`测试中... (0/\${hosts.length})\`;
-            batchTestResult.style.display = 'none';
-            batchTestResult.innerHTML = '';
-            
-            try {
-                const currentUrl = new URL(window.location.href);
-                const baseUrl = currentUrl.origin;
-                
-                const response = await fetch(\`\${baseUrl}/batch-test\`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        hosts: hosts,
-                        port: port,
-                        timeout: timeout,
-                        concurrency: 5
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    batchTestResult.style.display = 'block';
-                    let html = \`
-                        <div style="padding: 12px; background: rgba(142, 142, 147, 0.12); border-radius: 8px; margin-bottom: 12px;">
-                            <div style="font-weight: 600; margin-bottom: 4px;">测试完成</div>
-                            <div style="font-size: 13px; color: #86868b;">成功: \${data.successCount} / 总计: \${data.total}</div>
-                        </div>
-                    \`;
-                    
-                    data.results.forEach((result, index) => {
-                        const bgColor = result.success ? 'rgba(52, 199, 89, 0.1)' : 'rgba(255, 59, 48, 0.1)';
-                        const statusColor = result.success ? '#34c759' : '#ff3b30';
-                        const statusText = result.success ? '✓' : '✗';
-                        
-                        html += \`
-                            <div style="padding: 12px; background: \${bgColor}; border-radius: 8px; margin-bottom: 8px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                    <div style="font-weight: 600; color: \${statusColor};">\${statusText} \${result.host}:\${result.port}</div>
-                                    <div style="font-weight: 600; color: #1d1d1f;">\${result.latency}ms</div>
-                                </div>
-                                \${result.success ? \`
-                                    \${result.ip ? \`<div style="font-size: 13px; color: #86868b;">IP: \${result.ip}</div>\` : ''}
-                                    \${result.location ? \`<div style="font-size: 13px; color: #86868b;">位置: \${result.location}</div>\` : ''}
-                                    \${result.colo ? \`<div style="font-size: 13px; color: #86868b;">数据中心: \${result.colo}</div>\` : ''}
-                                \` : \`
-                                    <div style="font-size: 13px; color: #ff3b30;">错误: \${result.error || '未知错误'}</div>
-                                \`}
-                            </div>
-                        \`;
-                    });
-                    
-                    batchTestResult.innerHTML = html;
-                } else {
-                    batchTestResult.style.display = 'block';
-                    batchTestResult.innerHTML = \`
-                        <div style="padding: 12px; background: rgba(255, 59, 48, 0.1); border-radius: 8px; color: #ff3b30;">
-                            测试失败: \${data.error || '未知错误'}
-                        </div>
-                    \`;
-                }
-            } catch (error) {
-                batchTestResult.style.display = 'block';
-                batchTestResult.innerHTML = \`
-                    <div style="padding: 12px; background: rgba(255, 59, 48, 0.1); border-radius: 8px; color: #ff3b30;">
-                        网络错误: \${error.message || '未知错误'}
-                    </div>
-                \`;
-            } finally {
-                batchTestBtn.disabled = false;
-                batchTestBtn.textContent = '批量测试';
-            }
-        }
-        
-        // 支持回车键触发测试
-        document.addEventListener('DOMContentLoaded', function() {
-            const testHostInput = document.getElementById('testHost');
-            if (testHostInput) {
-                testHostInput.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        testSingleLatency();
-                    }
-                });
-            }
-        });
     </script>
 </body>
 </html>`;
@@ -1755,93 +1536,6 @@ export default {
             return new Response(generateHomePage(scuValue), {
                 headers: { 'Content-Type': 'text/html; charset=utf-8' }
             });
-        }
-        
-        // 在线测试延迟 API: /test?host=xxx&port=443
-        if (path === '/test') {
-            const host = url.searchParams.get('host');
-            const port = parseInt(url.searchParams.get('port') || '443');
-            const timeout = parseInt(url.searchParams.get('timeout') || '5000');
-            
-            if (!host) {
-                return new Response(JSON.stringify({ 
-                    success: false, 
-                    error: '缺少host参数' 
-                }), {
-                    status: 400,
-                    headers: { 'Content-Type': 'application/json; charset=utf-8' }
-                });
-            }
-            
-            const result = await testLatency(host, port, timeout);
-            return new Response(JSON.stringify(result, null, 2), {
-                headers: { 
-                    'Content-Type': 'application/json; charset=utf-8',
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type'
-                }
-            });
-        }
-        
-        // 批量测试延迟 API: /batch-test
-        if (path === '/batch-test') {
-            if (request.method === 'OPTIONS') {
-                return new Response(null, {
-                    headers: {
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type'
-                    }
-                });
-            }
-            
-            if (request.method === 'POST') {
-                try {
-                    const body = await request.json();
-                    const hosts = body.hosts || [];
-                    const port = parseInt(body.port || '443');
-                    const timeout = parseInt(body.timeout || '5000');
-                    const concurrency = parseInt(body.concurrency || '5');
-                    
-                    if (!Array.isArray(hosts) || hosts.length === 0) {
-                        return new Response(JSON.stringify({ 
-                            success: false, 
-                            error: 'hosts必须是非空数组' 
-                        }), {
-                            status: 400,
-                            headers: { 
-                                'Content-Type': 'application/json; charset=utf-8',
-                                'Access-Control-Allow-Origin': '*'
-                            }
-                        });
-                    }
-                    
-                    const results = await batchTestLatency(hosts, port, timeout, concurrency);
-                    return new Response(JSON.stringify({ 
-                        success: true, 
-                        results: results,
-                        total: results.length,
-                        successCount: results.filter(r => r.success).length
-                    }, null, 2), {
-                        headers: { 
-                            'Content-Type': 'application/json; charset=utf-8',
-                            'Access-Control-Allow-Origin': '*'
-                        }
-                    });
-                } catch (error) {
-                    return new Response(JSON.stringify({ 
-                        success: false, 
-                        error: error.message 
-                    }), {
-                        status: 500,
-                        headers: { 
-                            'Content-Type': 'application/json; charset=utf-8',
-                            'Access-Control-Allow-Origin': '*'
-                        }
-                    });
-                }
-            }
         }
         
         // 测试优选API API: /test-optimize-api?url=xxx&port=443
@@ -1923,7 +1617,7 @@ export default {
             // 协议选择
             const evEnabled = url.searchParams.get('ev') === 'yes' || (url.searchParams.get('ev') === null && ev);
             const etEnabled = url.searchParams.get('et') === 'yes';
-            const vmEnabled = url.searchParams.get('vm') === 'yes';
+            const vmEnabled = url.searchParams.get('mess') === 'yes';
             
             // IPv4/IPv6选择
             const ipv4Enabled = url.searchParams.get('ipv4') !== 'no';
@@ -1946,4 +1640,5 @@ export default {
         return new Response('Not Found', { status: 404 });
     }
 };
+
 
