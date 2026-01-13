@@ -30,11 +30,6 @@ const directDomains = [
 // 默认优选IP来源URL
 const defaultIPURL = 'https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt';
 
-// UUID验证
-function isValidUUID(str) {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(str);
-}
 
 // 从环境变量获取配置
 function getConfigValue(key, defaultValue) {
@@ -1189,8 +1184,8 @@ function generateHomePage(scuValue) {
             </div>
             
             <div class="form-group">
-                <label>UUID</label>
-                <input type="text" id="uuid" placeholder="请输入UUID">
+                <label>UUID或Password</label>
+                <input type="text" id="uuid" placeholder="请输入UUID或Password">
             </div>
             
             <div class="form-group">
@@ -1389,14 +1384,10 @@ function generateHomePage(scuValue) {
             const customPath = document.getElementById('customPath').value.trim() || '/';
             
             if (!domain || !uuid) {
-                alert('请先填写域名和UUID');
+                alert('请先填写域名和UUID或Password');
                 return;
             }
             
-            if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
-                alert('UUID格式不正确');
-                return;
-            }
             
             // 检查至少选择一个协议
             if (!switches.switchVL && !switches.switchTJ && !switches.switchVM) {
@@ -1424,7 +1415,7 @@ function generateHomePage(scuValue) {
             // 添加协议选择
             if (switches.switchVL) subscriptionUrl += '&ev=yes';
             if (switches.switchTJ) subscriptionUrl += '&et=yes';
-            if (switches.switchVM) subscriptionUrl += '&mess=yes';
+            if (switches.switchVM) subscriptionUrl += '&666=yes';
             
             if (!ipv4Enabled) subscriptionUrl += '&ipv4=no';
             if (!ipv6Enabled) subscriptionUrl += '&ipv6=no';
@@ -1594,14 +1585,10 @@ export default {
             }
         }
         
-        // 订阅请求格式: /{UUID}/sub?domain=xxx&epd=yes&epi=yes&egi=yes
+        // 订阅请求格式: /{uuid或password}/sub?domain=xxx&epd=yes&epi=yes&egi=yes
         const pathMatch = path.match(/^\/([^\/]+)\/sub$/);
         if (pathMatch) {
             const uuid = pathMatch[1];
-            
-            if (!isValidUUID(uuid)) {
-                return new Response('无效的UUID格式', { status: 400 });
-            }
             
             const domain = url.searchParams.get('domain');
             if (!domain) {
@@ -1617,7 +1604,7 @@ export default {
             // 协议选择
             const evEnabled = url.searchParams.get('ev') === 'yes' || (url.searchParams.get('ev') === null && ev);
             const etEnabled = url.searchParams.get('et') === 'yes';
-            const vmEnabled = url.searchParams.get('mess') === 'yes';
+            const vmEnabled = url.searchParams.get('666') === 'yes';
             
             // IPv4/IPv6选择
             const ipv4Enabled = url.searchParams.get('ipv4') !== 'no';
