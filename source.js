@@ -1,5 +1,6 @@
 // Cloudflare Worker - 简化版优选工具
 // 仅保留优选域名、优选IP、GitHub、上报和节点生成功能
+// 修复记录：已修正 VMess 协议下节点名称包含中文导致 Error 1101 的问题
 
 // 默认配置
 let customPreferredIPs = [];
@@ -30,6 +31,11 @@ const directDomains = [
 // 默认优选IP来源URL
 const defaultIPURL = 'https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt';
 
+// UUID验证
+function isValidUUID(str) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+}
 
 // 从环境变量获取配置
 function getConfigValue(key, defaultValue) {
@@ -377,7 +383,7 @@ async function generateTrojanLinksFromSource(list, user, workerDomain, disableNo
     return links;
 }
 
-// 生成VMess链接
+// 生成VMess链接 (已修复中文名导致1101报错的问题)
 function generateVMessLinksFromSource(list, user, workerDomain, disableNonTLS = false, customPath = '/') {
     const CF_HTTP_PORTS = [80, 8080, 8880, 2052, 2082, 2086, 2095];
     const CF_HTTPS_PORTS = [443, 2053, 2083, 2087, 2096, 8443];
@@ -434,7 +440,14 @@ function generateVMessLinksFromSource(list, user, workerDomain, disableNonTLS = 
                 vmessConfig.sni = workerDomain;
                 vmessConfig.fp = "chrome";
             }
-            const vmessBase64 = btoa(JSON.stringify(vmessConfig));
+            
+            // 核心修复：处理中文编码，防止 btoa 报错
+            const jsonStr = JSON.stringify(vmessConfig);
+            const vmessBase64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g,
+                function toSolidBytes(match, p1) {
+                    return String.fromCharCode('0x' + p1);
+            }));
+            
             links.push(`vmess://${vmessBase64}`);
         });
     });
@@ -1184,7 +1197,7 @@ function generateHomePage(scuValue) {
             </div>
             
             <div class="form-group">
-                <label>UUID或Password</label>
+                <label>UUID/Password</label>
                 <input type="text" id="uuid" placeholder="请输入UUID或Password">
             </div>
             
@@ -1384,10 +1397,9 @@ function generateHomePage(scuValue) {
             const customPath = document.getElementById('customPath').value.trim() || '/';
             
             if (!domain || !uuid) {
-                alert('请先填写域名和UUID或Password');
+                alert('请先填写域名和UUID/Password');
                 return;
             }
-            
             
             // 检查至少选择一个协议
             if (!switches.switchVL && !switches.switchTJ && !switches.switchVM) {
@@ -1415,7 +1427,7 @@ function generateHomePage(scuValue) {
             // 添加协议选择
             if (switches.switchVL) subscriptionUrl += '&ev=yes';
             if (switches.switchTJ) subscriptionUrl += '&et=yes';
-            if (switches.switchVM) subscriptionUrl += '&666=yes';
+            if (switches.switchVM) subscriptionUrl += '&mess=yes';
             
             if (!ipv4Enabled) subscriptionUrl += '&ipv4=no';
             if (!ipv6Enabled) subscriptionUrl += '&ipv6=no';
@@ -1585,7 +1597,7 @@ export default {
             }
         }
         
-        // 订阅请求格式: /{uuid或password}/sub?domain=xxx&epd=yes&epi=yes&egi=yes
+        // 订阅请求格式: /{UUID或Password}/sub?domain=xxx&epd=yes&epi=yes&egi=yes
         const pathMatch = path.match(/^\/([^\/]+)\/sub$/);
         if (pathMatch) {
             const uuid = pathMatch[1];
@@ -1604,7 +1616,7 @@ export default {
             // 协议选择
             const evEnabled = url.searchParams.get('ev') === 'yes' || (url.searchParams.get('ev') === null && ev);
             const etEnabled = url.searchParams.get('et') === 'yes';
-            const vmEnabled = url.searchParams.get('666') === 'yes';
+            const vmEnabled = url.searchParams.get('mess') === 'yes';
             
             // IPv4/IPv6选择
             const ipv4Enabled = url.searchParams.get('ipv4') !== 'no';
@@ -1627,5 +1639,3 @@ export default {
         return new Response('Not Found', { status: 404 });
     }
 };
-
-
